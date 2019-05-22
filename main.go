@@ -63,7 +63,10 @@ var (
 func probeHandler(w http.ResponseWriter, r *http.Request, c *config.Config, logger log.Logger, rh *resultHistory) {
 	moduleName := r.URL.Query().Get("module")
 	if moduleName == "" {
-		moduleName = "http_2xx"
+		for key := range c.Modules {
+			moduleName = key
+			break
+		}
 	}
 	module, ok := c.Modules[moduleName]
 	if !ok {
@@ -174,7 +177,7 @@ func (sl scrapeLogger) Log(keyvals ...interface{}) error {
 	return sl.next.Log(kvs...)
 }
 
-// Returns plaintext debug output for a probe.
+// DebugOutput Returns plaintext debug output for a probe.
 func DebugOutput(module *config.Module, logBuffer *bytes.Buffer, registry *prometheus.Registry) string {
 	buf := &bytes.Buffer{}
 	fmt.Fprintf(buf, "Logs for the probe:\n")
@@ -269,9 +272,22 @@ func run() int {
 		})
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/probe", func(w http.ResponseWriter, r *http.Request) {
-		sc.Lock()
-		conf := sc.C
-		sc.Unlock()
+		var conf = &config.Config{}
+		if r.Method == "POST" {
+			var mod = &config.Module{}
+			decoder := yaml.NewDecoder(r.Body)
+			decoder.KnownFields(true)
+			if err := decoder.Decode(mod); err != nil {
+				http.Error(w, fmt.Sprintf("error parsing config file: %s", err), http.StatusBadRequest)
+				fmt.Printf("error parsing config file: %s", err)
+				return
+			}
+			conf.Modules = map[string]config.Module{"temp": *mod}
+		} else {
+			sc.Lock()
+			conf = sc.C
+			sc.Unlock()
+		}
 		probeHandler(w, r, conf, logger, rh)
 	})
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
