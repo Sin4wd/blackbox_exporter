@@ -274,15 +274,15 @@ func run() int {
 	http.HandleFunc("/probe", func(w http.ResponseWriter, r *http.Request) {
 		var conf = &config.Config{}
 		if r.Method == "POST" {
-			var mod = &config.Module{}
+			var mapmod = make(map[string]config.Module)
 			decoder := yaml.NewDecoder(r.Body)
 			decoder.KnownFields(true)
-			if err := decoder.Decode(mod); err != nil {
+			if err := decoder.Decode(mapmod); err != nil {
 				http.Error(w, fmt.Sprintf("error parsing config file: %s", err), http.StatusBadRequest)
 				fmt.Printf("error parsing config file: %s", err)
 				return
 			}
-			conf.Modules = map[string]config.Module{"temp": *mod}
+			conf.Modules = mapmod
 		} else {
 			sc.Lock()
 			conf = sc.C
